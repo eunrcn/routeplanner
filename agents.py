@@ -1,9 +1,18 @@
 import random
 import numpy as np
+from pedestrian_path_env import PedestrianPaths
 
 
 class SARSAAgent:
-    def __init__(self, env, state_size, action_size, alpha=0.1, gamma=0.99, epsilon=0.1):
+    def __init__(
+        self,
+        env: PedestrianPaths,
+        state_size: int,
+        action_size: int,
+        alpha: float = 0.1,
+        gamma: float = 0.99,
+        epsilon: float = 0.1,
+    ):
         self.state_size = state_size
         self.action_size = action_size
         self.alpha = alpha  # Learning rate
@@ -24,7 +33,7 @@ class SARSAAgent:
             if curr_state == self.state_size:
                 break
 
-    def choose_action(self, state):  # str -> str
+    def choose_action(self, state: str) -> str:
         """Epsilon-greedy policy for action selection"""
         if random.random() < self.epsilon:
             return random.choice(self.env.possible_actions[state])  # Explore
@@ -32,7 +41,7 @@ class SARSAAgent:
             state_index = int(state[1:]) - 1
             return "S" + str(np.argmax(self.q_table[state_index]) + 1)  # Exploit
 
-    def update(self, state, action, reward, next_state, next_action):
+    def update(self, state: str, action: str, reward: float, next_state: str, next_action: str) -> None:
         """SARSA Q-value update rule. On-Policy"""
         state_index = int(state[1:]) - 1
         action_index = int(action[1:]) - 1
@@ -44,15 +53,23 @@ class SARSAAgent:
 
 
 class QLearningAgent:
-    def __init__(self, env, state_size, action_size, alpha=0.1, gamma=0.99, epsilon=0.1):
+    def __init__(
+        self,
+        env: PedestrianPaths,
+        state_size: int,
+        action_size: int,
+        alpha: float = 0.1,
+        gamma: float = 0.99,
+        epsilon: float = 0.1,
+    ):
         self.state_size = state_size
         self.action_size = action_size
         self.alpha = alpha  # Learning rate
         self.gamma = gamma  # Discount factor
         self.epsilon = epsilon  # Exploration rate
-        self.q_table = np.full(
-            (state_size, action_size), float("-inf")
-        )  # Q-value table instantiate all as impossible actions first
+
+        # Q-value table instantiate all as impossible actions first
+        self.q_table = np.full((state_size, action_size), float("-inf"))
         self.env = env
 
         # certain values in the q_table for select few states that can be reached from each state
@@ -65,7 +82,7 @@ class QLearningAgent:
             if curr_state == self.state_size:
                 break
 
-    def choose_action(self, state):
+    def choose_action(self, state: str) -> str:
         """Epsilon-greedy policy for action selection"""
         if random.random() < self.epsilon:
             return random.choice(self.env.possible_actions[state])  # Explore
@@ -73,7 +90,7 @@ class QLearningAgent:
             state_index = int(state[1:]) - 1
             return "S" + str(np.argmax(self.q_table[state_index]) + 1)  # Exploit
 
-    def update(self, state, action, reward, next_state):
+    def update(self, state: str, action: str, reward: float, next_state: str) -> None:
         """Q-Learning update rule (Off-policy TD control)"""
         state_index = int(state[1:]) - 1
         action_index = int(action[1:]) - 1

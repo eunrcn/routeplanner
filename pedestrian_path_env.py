@@ -48,7 +48,7 @@ weather_scores = {
     for state, neighbors in possible_actions.items()
 }
 
-# O(1) lookup for weather score
+# EXAMPLE: of O(1) lookup for weather score
 # define the state and action to retrieve the weather score
 state, action = "S3", "S8"
 weather_score = weather_scores[state][action]
@@ -83,7 +83,7 @@ safety_scores = {
     for state, neighbors in possible_actions.items()
 }
 
-# O(1) lookup for safety score
+# EXAMPLE: O(1) lookup for safety score
 # define the state and action to retrieve the safety score
 state, action = "S3", "S8"
 safety_score = safety_scores[state][action]
@@ -118,7 +118,7 @@ travel_time_scores = {
     for state, neighbors in possible_actions.items()
 }
 
-# O(1) lookup for travel time score
+# EXAMPLE: O(1) lookup for travel time score
 # define the state and action to retrieve the travel time score
 state, action = "S3", "S8"
 travel_time_score = travel_time_scores[state][action]
@@ -127,7 +127,12 @@ travel_time_score = travel_time_scores[state][action]
 
 
 class PedestrianPaths:
-    def __init__(self, weather, safety, travel):
+    def __init__(
+        self,
+        weather_scores: dict[str, dict[str, int]],
+        safety_scores: dict[str, dict[str, int]],
+        travel_time_scores: dict[str, dict[str, int]],
+    ):
         self.state = "S1"  # Start state
         self.goal = "S14"
         self.num_states = 14
@@ -163,9 +168,9 @@ class PedestrianPaths:
             "S13": 0.9,
             "S14": 0.9,
         }
-        self.weather = weather
-        self.safety = safety
-        self.travel = travel
+        self.weather_scores = weather_scores
+        self.safety_scores = safety_scores
+        self.travel_time_scores = travel_time_scores
         # Define the normalization ranges (assuming max and min possible values for each score type)
         self.WEATHER_MAX = 1000
         self.SAFETY_MAX = 1000
@@ -175,7 +180,7 @@ class PedestrianPaths:
         self.SAFETY_WEIGHT = 0.4
         self.TRAVEL_TIME_WEIGHT = 0.3
 
-    def step(self, action):  # str -> (str, int, bool) #simple since deterministic action
+    def step(self, action: str) -> tuple[str, float, bool]:  # simple since deterministic action
         """Move in the environment based on action"""
         probability = self.transition_probabilities[action]
         if random.random() < probability:  # successfully found the way to this state
@@ -187,18 +192,18 @@ class PedestrianPaths:
         done = self.state == self.goal  # Episode ends when goal is reached
         return self.state, reward, done
 
-    def reset(self):  # _ -> str
+    def reset(self) -> str:
         self.state = "S1"
         return self.state
 
     ################################################################################################
     # Functions to dynamically calculate the reward based on the state and action, using the scores (also based on the (weather, safety, travel time) weights depending on what user prioritizes most?)
     ################################################################################################
-    def normalize_score(self, score, max_score):  # int,int -> int
+    def normalize_score(self, score: int, max_score: int) -> float:
         """Normalize the score based on the maximum score for each category."""
         return score / max_score
 
-    def calculate_reward(self, state, action, weather_weight, safety_weight, travel_time_weight):  # -> int
+    def calculate_reward(self, state: str, action: str) -> float:
         """
         Smarter reward function that considers normalized scores and weighted importance.
         Incorporates dynamic scaling for weather, safety, and travel time.
@@ -228,3 +233,5 @@ class PedestrianPaths:
 
 
 env = PedestrianPaths(weather_scores, safety_scores, travel_time_scores)
+STATE_SIZE = 14
+ACTION_SIZE = 14
