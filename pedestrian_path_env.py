@@ -1,6 +1,7 @@
 import random
 
 
+START_STATE = "S1"
 possible_actions = {  # k:v. original state: [lst of possible next states]
     "S1": ["S2", "S6", "S10"],
     "S2": ["S1", "S6", "S7", "S3", "S11"],
@@ -22,6 +23,8 @@ possible_actions = {  # k:v. original state: [lst of possible next states]
 # Add weather score to states
 ################################################################################################
 
+WEATHER_MAX = 1000
+
 # Weather exposure lookup dictionary
 # fmt: off
 weather_exposure = {
@@ -41,6 +44,8 @@ weather_exposure = {
     (14, 13): 80, (14, 9): 39, (14, 5): 52
 }
 # fmt: on
+for value in weather_exposure.values():
+    assert 0 <= value <= WEATHER_MAX
 
 # Assign weather exposure scores for each action
 weather_scores = {
@@ -56,6 +61,8 @@ weather_score = weather_scores[state][action]
 ################################################################################################
 # Add safety score to states
 ################################################################################################
+
+SAFETY_MAX = 1000
 
 # Safety exposure lookup dictionary
 # fmt: off
@@ -76,6 +83,8 @@ safety_exposure = {
     (14, 13): 99, (14, 9): 99, (14, 5): 99
 }
 # fmt: on
+for value in safety_exposure.values():
+    assert 0 <= value <= SAFETY_MAX
 
 # Assign safety scores for each action
 safety_scores = {
@@ -91,6 +100,8 @@ safety_score = safety_scores[state][action]
 ################################################################################################
 # Add travel time score to states
 ################################################################################################
+
+TRAVEL_TIME_MAX = 1000
 
 # Travel Time lookup dictionary
 # fmt: off
@@ -112,6 +123,9 @@ travel_time = {
 }
 # fmt: on
 
+for value in travel_time.values():
+    assert 0 <= value <= TRAVEL_TIME_MAX
+
 # Assign travel time scores for each action
 travel_time_scores = {
     state: {action: travel_time.get((int(state[1:]), int(action[1:])), 1000) for action in neighbors}
@@ -125,6 +139,9 @@ travel_time_score = travel_time_scores[state][action]
 
 ##################################### Pedestrian Path class
 
+STATE_SIZE = 14
+ACTION_SIZE = 14
+
 
 class PedestrianPaths:
     def __init__(
@@ -133,25 +150,14 @@ class PedestrianPaths:
         safety_scores: dict[str, dict[str, int]],
         travel_time_scores: dict[str, dict[str, int]],
     ):
-        self.state = "S1"  # Start state
+        self.start_state = START_STATE
+        self.state = self.start_state  # Current state
         self.goal = "S14"
-        self.num_states = 14
-        self.possible_actions = {  # k:v. original state: [lst of possible next states]
-            "S1": ["S2", "S6", "S10"],
-            "S2": ["S1", "S6", "S7", "S3", "S11"],
-            "S3": ["S2", "S7", "S8", "S4"],
-            "S4": ["S3", "S8", "S9", "S5"],
-            "S5": ["S4", "S9", "S14"],
-            "S6": ["S1", "S2", "S10", "S11", "S7"],
-            "S7": ["S2", "S3", "S8", "S12", "S11", "S6"],
-            "S8": ["S3", "S4", "S7", "S9", "S12", "S13"],
-            "S9": ["S4", "S5", "S8", "S13", "S14"],
-            "S10": ["S1", "S6", "S11"],
-            "S11": ["S10", "S6", "S2", "S7", "S12"],
-            "S12": ["S11", "S7", "S8", "S13"],
-            "S13": ["S12", "S8", "S9", "S14"],
-            "S14": ["S13", "S9", "S5"],
-        }
+        self.num_states = STATE_SIZE
+        self.possible_actions = possible_actions
+
+        # Transition probability depends on the *current* state,
+        # representing the chance of successfully moving *from* that state.
         self.transition_probabilities = {
             "S1": 0.6,
             "S2": 0.6,
@@ -166,48 +172,65 @@ class PedestrianPaths:
             "S11": 0.8,
             "S12": 0.8,
             "S13": 0.9,
-            "S14": 0.9,
+            "S14": 0.9,  # Note: S14 prob might not matter if it's terminal
         }
         self.weather_scores = weather_scores
         self.safety_scores = safety_scores
         self.travel_time_scores = travel_time_scores
         # Define the normalization ranges (assuming max and min possible values for each score type)
-        self.WEATHER_MAX = 1000
-        self.SAFETY_MAX = 1000
-        self.TRAVEL_TIME_MAX = 1000
+        self.WEATHER_MAX = WEATHER_MAX
+        self.SAFETY_MAX = SAFETY_MAX
+        self.TRAVEL_TIME_MAX = TRAVEL_TIME_MAX
+
         # Define the weights for each score (adjust based on their importance)
         self.WEATHER_WEIGHT = 0.3
         self.SAFETY_WEIGHT = 0.4
         self.TRAVEL_TIME_WEIGHT = 0.3
 
-    def step(self, action: str) -> tuple[str, float, bool]:  # simple since deterministic action
-        """Move in the environment based on action"""
-        probability = self.transition_probabilities[action]
-        if random.random() < probability:  # successfully found the way to this state
-            self.state = action
-        # else, got lost and remain in the same state
+        self.GOAL_REWARD = 100  # Reward for reaching the goal state
+        self.STEP_COST = 0.3  # Cost for taking a step
 
-        # Define rewards
-        reward = 1 if self.state == self.goal else -0.3
+    def step(self, action: str) -> tuple[str, float, bool]:
+        """
+        Performs a state transition based on the chosen action.
+        Calculates the reward using the score-based function.
+        Applies probabilistic transitions.
+        Returns the next state, the calculated reward, and a done flag.
+        """
+        # Calculate reward as the cost of attempting the action from the original_state
+        step_reward = self.calculate_reward(self.state, action)
+
+        # Probability transition of successfully moving *from* the current state
+        probability = self.transition_probabilities[action]
+        if random.random() < probability:
+            self.state = action # Successful transition: move to the intended action state
+
+        # Check for Goal
         done = self.state == self.goal  # Episode ends when goal is reached
-        return self.state, reward, done
+        final_reward = self.GOAL_REWARD if done else step_reward
+        return self.state, final_reward, done
 
     def reset(self) -> str:
-        self.state = "S1"
+        """Resets the environment to the starting state."""
+        self.state = self.start_state
         return self.state
 
-    ################################################################################################
-    # Functions to dynamically calculate the reward based on the state and action, using the scores (also based on the (weather, safety, travel time) weights depending on what user prioritizes most?)
-    ################################################################################################
-    def normalize_score(self, score: int, max_score: int) -> float:
+    def normalize_score(self, score: int, max_score: float) -> float:
         """Normalize the score based on the maximum score for each category."""
-        return score / max_score
+        if max_score <= 0:  # Avoid division by zero
+            return 0.0
+        # Clamp score to be non-negative before normalizing
+        # Scores represent "cost", so lower is better. Normalization maps [0, max] -> [0, 1]
+        return max(0.0, score) / max_score
 
     def calculate_reward(self, state: str, action: str) -> float:
         """
-        Smarter reward function that considers normalized scores and weighted importance.
-        Incorporates dynamic scaling for weather, safety, and travel time.
+        Calculates a reward based on normalized, weighted scores for weather, safety, and travel time.
+        Higher scores (weather exposure, safety risk, travel time) lead to a more negative reward.
         """
+        # Check if the action is valid from the current state
+        if action not in self.possible_actions.get(state, []):
+            raise NotImplementedError(f"Invalid action '{action}' attempted from state '{state}'.")
 
         # Retrieve individual scores
         weather_score = self.weather_scores[state][action]
@@ -226,12 +249,17 @@ class PedestrianPaths:
             + self.TRAVEL_TIME_WEIGHT * normalized_travel_time
         )
 
-        # Reward is the negative of the total score (since higher scores should be worse)
-        reward = -1 * total_score
+        # Reward is the negative of the total cost score (since higher scores should be worse)
+        # We want to maximize reward, which means minimizing cost.
+        reward = -total_score - self.STEP_COST  # Add a small cost for taking any step
 
         return reward
 
 
-env = PedestrianPaths(weather_scores, safety_scores, travel_time_scores)
-STATE_SIZE = 14
-ACTION_SIZE = 14
+# --- Instantiate Environment and define constants ---
+
+env = PedestrianPaths(
+    weather_scores,
+    safety_scores,
+    travel_time_scores,
+)
